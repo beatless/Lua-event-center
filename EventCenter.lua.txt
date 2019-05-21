@@ -1,0 +1,160 @@
+
+--事件
+local EventCenter = {}
+
+function EventCenter:_init()
+	self._targetDic = {}
+	self._eventDic = {}
+	self._singleEvents = {}
+end
+
+EventCenter:_init()
+
+--添加事件
+function EventCenter:addEvent(eventName, handlerFunc, target)
+	assert(eventName, "invalide eventName " .. tostring(eventName))
+	assert(handlerFunc, "invalide handlerFunc " .. tostring(handlerFunc) .. " of event " .. tostring(eventName))
+
+	if target == nil then
+		if self._singleEvents[eventName] == nil then
+			self._singleEvents[eventName] = {}
+		end
+
+		local singleHandlers = self._singleEvents[eventName]
+
+		if singleHandlers[tostring(handlerFunc)] ~= nil then
+			print("this handler of event " .. eventName .. " is been replaced.")
+		end
+		singleHandlers[tostring(handlerFunc)] = handlerFunc
+		return
+	end
+
+	if self._targetDic[target] == nil then
+		self._targetDic[target] = {}
+	end
+
+	local eventDic = self._targetDic[target]
+
+	if eventDic[eventName] ~= nil then
+		assert(false, "that has been a listener for " .. eventName)
+	end
+
+	local handleCall = handler(handlerFunc, target)
+	eventDic[eventName] = handleCall
+
+	--保存一份事件对于target的映射
+	if not self._eventDic[eventName] then
+		self._eventDic[eventName] = {}
+	end
+
+	local targetDic = self._eventDic[eventName]
+	targetDic[target] = true
+end
+
+--移除某个事件
+function EventCenter:removeEvent(eventName, handlerFunc, target)
+	assert(eventName, "invalide eventName " .. tostring(eventName))
+	assert(handlerFunc, "invalide handlerFunc " .. tostring(handlerFunc) .. " of event " .. tostring(eventName))
+
+	if target == nil then
+		local singleHandlers = self._singleEvents[eventName]
+
+		if singleHandlers == nil then 
+			return 
+		end
+		
+		singleHandlers[tostring(handlerFunc)] = nil --移除相关事件		
+
+		return
+	end
+
+	if self._targetDic[target] == nil then
+		return
+	end
+
+	local eventDic = self._targetDic[target]
+
+	if eventDic[eventName] then
+		eventDic[eventName] = nil
+	end
+
+	--检查是否可以移除事件对于target的映射
+	if self._eventDic[eventName] and self._eventDic[eventName][target] ~= nil then
+		local hasEvent = false
+		for k,_ in pairs(eventDic) do
+			if k == eventName then
+				hasEvent = true
+				break
+			end
+		end
+
+		if not hasEvent then
+			local targetDic = self._eventDic[eventName]
+			targetDic[target] = nil
+		end
+	end
+end
+
+--发送事件
+function EventCenter:sendEvent(eventName, ...)
+	assert(eventName, "invalide eventName " .. tostring(eventName))
+
+	--优先发送没有对象绑定的事件
+	if self._singleEvents[eventName] ~= nil then
+		local singleHandlers = self._singleEvents[eventName]
+		for _,v in pairs(singleHandlers) do
+			v(...)
+		end
+	end
+
+	--再发送对象相关的事件。
+	local targetDic = self._eventDic[eventName]
+	if targetDic then
+		for k,_ in pairs(targetDic) do
+			local eventDic = self._targetDic[k]
+			if eventDic ~= nil then
+				for k_, v_ in pairs(eventDic) do
+					if k_ == eventName then
+						if v_ ~= nil then
+							v_(...)
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+--移除某个对象的所有事件
+function EventCenter:removeEvents(target)
+	assert(target, "invalide target " .. tostring(target))
+	
+	if target == nil then 
+		return 
+	end 
+
+	if self._targetDic[target] == nil then
+		return
+	end
+	
+	local eventDic = self._targetDic[target]
+		
+	--移除事件相关的映射
+	for k, targetDic in pairs(eventDic) do
+		if targetDic ~= nil then
+			eventDic[k] = nil
+		end
+
+		local eventDicTar = self._eventDic[k]
+		for j, _ in pairs(eventDicTar) do
+			if j == target then
+				eventDicTar[j] = nil
+				break
+			end
+		end
+	end
+
+	self._targetDic[target] = nil
+end
+
+return EventCenter
